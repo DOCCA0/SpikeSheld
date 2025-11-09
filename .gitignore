@@ -1,0 +1,54 @@
+.DS_Store
+node_modules/
+dist/
+build/
+*.log
+
+# Environment files
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+backend/main
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test coverage
+*.out
+coverage/
+
+# Database
+*.db
+postgres_data/
+
+# Hardhat
+contracts/cache/
+contracts/artifacts/
+contracts/node_modules/
+
+# Frontend
+frontend/build/
+frontend/.env.local
+frontend/node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+Thumbs.db
+
+contracts/cache/*
+contracts/node_modules/*
+contracts/artifacts/*
