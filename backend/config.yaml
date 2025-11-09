@@ -1,0 +1,25 @@
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  dbname: spikeshield
+
+rpc:
+  url: https://sepolia.infura.io/v3/YOUR_INFURA_KEY
+  contract_address: "0x0000000000000000000000000000000000000000"
+  private_key: "your_private_key_here"
+
+detector:
+  # Threshold for spike detection (percentage drop)
+  threshold_percent: 10.0
+  # Time window for comparison (minutes)
+  window_minutes: 5
+
+chainlink:
+  # Chainlink price feed address for BTC/USD on Sepolia
+  btc_usd_feed: "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43"
+  # Update interval in seconds
+  update_interval: 60
+
+mode: replay  # Default mode: replay or live
