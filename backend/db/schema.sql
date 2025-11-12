@@ -8,9 +8,11 @@ CREATE TABLE IF NOT EXISTS prices (
     low DECIMAL(20, 8),
     close DECIMAL(20, 8) NOT NULL,
     volume DECIMAL(20, 8),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_symbol_timestamp (symbol, timestamp)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Index for prices table
+CREATE INDEX IF NOT EXISTS idx_symbol_timestamp ON prices(symbol, timestamp);
 
 -- Table: spikes - records detected price spikes
 CREATE TABLE IF NOT EXISTS spikes (
