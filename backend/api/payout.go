@@ -5,11 +5,13 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"spikeshield/contracts"
 	"spikeshield/db"
 	"spikeshield/utils"
 )
@@ -18,12 +20,10 @@ import (
 type PayoutService struct {
 	Client          *ethclient.Client
 	ContractAddress common.Address
+	Contract        *contracts.InsurancePool
 	PrivateKey      *ecdsa.PrivateKey
 	ChainID         *big.Int
 }
-
-// Simplified InsurancePool ABI for executePayout function
-const insurancePoolABI = `[{"inputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"policyId","type":"uint256"},{"internalType":"string","name":"detectionTxHash","type":"string"}],"name":"executePayout","outputs":[],"stateMutability":"nonpayable","type":"function"}]`
 
 // NewPayoutService creates a new payout service instance
 func NewPayoutService(rpcURL, contractAddr, privateKeyHex string) (*PayoutService, error) {
@@ -42,9 +42,30 @@ func NewPayoutService(rpcURL, contractAddr, privateKeyHex string) (*PayoutServic
 		return nil, fmt.Errorf("failed to get chain ID: %w", err)
 	}
 
+	contractAddress := common.HexToAddress(contractAddr)
+	
+	// Create contract instance
+	insuranceContract, err := contracts.NewInsurancePool(contractAddress, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create contract instance: %w", err)
+	}
+
+	// Verify oracle address matches
+	oracleAddr := crypto.PubkeyToAddress(privateKey.PublicKey)
+	currentOracle, err := insuranceContract.Oracle(&bind.CallOpts{})
+	if err != nil {
+		utils.LogWarning("Could not verify oracle address: %v", err)
+	} else if currentOracle != oracleAddr {
+		return nil, fmt.Errorf("private key does not match contract oracle. Expected: %s, Got: %s", currentOracle.Hex(), oracleAddr.Hex())
+	}
+
+	utils.LogInfo("✅ Connected to InsurancePool contract at %s", contractAddress.Hex())
+	utils.LogInfo("✅ Oracle address: %s", oracleAddr.Hex())
+
 	return &PayoutService{
 		Client:          client,
-		ContractAddress: common.HexToAddress(contractAddr),
+		ContractAddress: contractAddress,
+		Contract:        insuranceContract,
 		PrivateKey:      privateKey,
 		ChainID:         chainID,
 	}, nil
@@ -86,8 +107,21 @@ func (ps *PayoutService) executeForPolicy(policy *db.Policy, spike *db.Spike) er
 		return fmt.Errorf("failed to create transactor: %w", err)
 	}
 
-	// Set gas parameters (you may need to adjust these)
-	auth.GasLimit = uint64(300000)
+	// Get current nonce
+	publicKeyECDSA, ok := ps.PrivateKey.Public().(*ecdsa.PublicKey)
+	if !ok {
+		return fmt.Errorf("failed to get public key")
+	}
+	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+	
+	nonce, err := ps.Client.PendingNonceAt(context.Background(), fromAddress)
+	if err != nil {
+		return fmt.Errorf("failed to get nonce: %w", err)
+	}
+	auth.Nonce = big.NewInt(int64(nonce))
+
+	// Set gas parameters
+	auth.GasLimit = uint64(300000) // Increase if needed
 	
 	// Get suggested gas price
 	gasPrice, err := ps.Client.SuggestGasPrice(context.Background())
@@ -96,22 +130,38 @@ func (ps *PayoutService) executeForPolicy(policy *db.Policy, spike *db.Spike) er
 	}
 	auth.GasPrice = gasPrice
 
-	// For simplicity in MVP, we'll use a direct contract call approach
-	// In production, use abigen to generate proper Go bindings
-	
-	// Prepare detection hash (use spike timestamp as identifier)
-	detectionHash := fmt.Sprintf("spike_%d_%s", spike.ID, spike.Timestamp.Format("20060102150405"))
+	utils.LogInfo("🚀 Calling executePayout on-chain for user %s, policy %d", policy.UserAddress, policy.ID)
+	utils.LogInfo("   Gas Price: %s wei", gasPrice.String())
+	utils.LogInfo("   Gas Limit: %d", auth.GasLimit)
 
-	utils.LogInfo("Calling executePayout for user %s, policy %d", policy.UserAddress, policy.ID)
+	// *** REAL ON-CHAIN TRANSACTION ***
+	tx, err := ps.Contract.ExecutePayout(
+		auth,
+		common.HexToAddress(policy.UserAddress),
+		big.NewInt(int64(policy.ID)),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to execute payout transaction: %w", err)
+	}
 
-	// NOTE: For MVP demo, we'll simulate the transaction
-	// In production, you would use proper contract bindings:
-	// tx, err := insuranceContract.ExecutePayout(auth, common.HexToAddress(policy.UserAddress), big.NewInt(int64(policy.ID)), detectionHash)
+	utils.LogInfo("📤 Transaction sent: %s", tx.Hash().Hex())
+	utils.LogInfo("⏳ Waiting for transaction to be mined...")
+
+	// Wait for transaction to be mined
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 	
-	// For demo purposes, create a mock transaction hash
-	txHash := fmt.Sprintf("0x%064d", spike.ID)
-	
-	utils.LogInfo("Payout transaction sent: %s", txHash)
+	receipt, err := bind.WaitMined(ctx, ps.Client, tx)
+	if err != nil {
+		return fmt.Errorf("failed to wait for transaction: %w", err)
+	}
+
+	if receipt.Status != 1 {
+		return fmt.Errorf("transaction failed with status: %d", receipt.Status)
+	}
+
+	utils.LogInfo("✅ Transaction mined in block %d", receipt.BlockNumber.Uint64())
+	utils.LogInfo("   Gas Used: %d", receipt.GasUsed)
 
 	// Record payout in database
 	payout := &db.Payout{
@@ -119,7 +169,7 @@ func (ps *PayoutService) executeForPolicy(policy *db.Policy, spike *db.Spike) er
 		UserAddress: policy.UserAddress,
 		Amount:      policy.CoverageAmount,
 		SpikeID:     spike.ID,
-		TxHash:      txHash,
+		TxHash:      tx.Hash().Hex(),
 	}
 
 	if err := db.InsertPayout(payout); err != nil {
@@ -131,8 +181,8 @@ func (ps *PayoutService) executeForPolicy(policy *db.Policy, spike *db.Spike) er
 		return fmt.Errorf("failed to update policy status: %w", err)
 	}
 
-	utils.LogInfo("✅ Payout executed successfully for user %s: $%.2f (tx: %s)",
-		policy.UserAddress, policy.CoverageAmount, txHash)
+	utils.LogInfo("💰 Payout executed successfully for user %s: $%.2f (tx: %s)",
+		policy.UserAddress, policy.CoverageAmount, tx.Hash().Hex())
 
 	return nil
 }
@@ -144,14 +194,3 @@ func (ps *PayoutService) Close() {
 	}
 }
 
-// NOTE: For a production implementation, you would:
-// 1. Use `abigen` to generate Go bindings from your contract ABI
-// 2. Import the generated package
-// 3. Use the typed contract methods
-// 
-// Example:
-// ```
-// contract, err := insurancepool.NewInsurancePool(ps.ContractAddress, ps.Client)
-// tx, err := contract.ExecutePayout(auth, userAddr, policyID, detectionHash)
-// receipt, err := bind.WaitMined(context.Background(), ps.Client, tx)
-// ```

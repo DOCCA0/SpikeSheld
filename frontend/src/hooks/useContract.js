@@ -9,7 +9,9 @@ const INSURANCE_POOL_ABI = [
   "function hasActivePolicy(address user) external view returns (bool)",
   "function premiumAmount() external view returns (uint256)",
   "function coverageAmount() external view returns (uint256)",
-  "function getPoolBalance() external view returns (uint256)"
+  "function getPoolBalance() external view returns (uint256)",
+  "event PolicyPurchased(address indexed user, uint256 policyId, uint256 premium, uint256 coverage, uint256 expiryTime)",
+  "event PayoutExecuted(address indexed user, uint256 policyId, uint256 amount)"
 ];
 
 const USDT_ABI = [
@@ -187,6 +189,36 @@ export const useContract = () => {
     }
   };
 
+  // Listen for payout events
+  const listenForPayouts = (callback) => {
+    if (!insuranceContract || !account) return;
+
+    const filter = insuranceContract.filters.PayoutExecuted(account);
+    
+    insuranceContract.on(filter, (user, policyId, amount, event) => {
+      console.log("🎉 Payout received!", {
+        user,
+        policyId: policyId.toString(),
+        amount: ethers.formatUnits(amount, 6),
+        blockNumber: event.log.blockNumber
+      });
+      
+      if (callback) {
+        callback({
+          user,
+          policyId: Number(policyId),
+          amount: ethers.formatUnits(amount, 6),
+          blockNumber: event.log.blockNumber
+        });
+      }
+    });
+
+    // Return cleanup function
+    return () => {
+      insuranceContract.off(filter);
+    };
+  };
+
   // Listen to account changes
   useEffect(() => {
     if (window.ethereum) {
@@ -215,6 +247,7 @@ export const useContract = () => {
     getBalance,
     getUserPolicies,
     hasActivePolicy,
+    listenForPayouts,
     isConnected: !!account
   };
 };

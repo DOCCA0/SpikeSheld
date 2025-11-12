@@ -35,7 +35,7 @@ contract InsurancePool is Ownable, ReentrancyGuard {
     
     // Events
     event PolicyPurchased(address indexed user, uint256 policyId, uint256 premium, uint256 coverage, uint256 expiryTime);
-    event PayoutExecuted(address indexed user, uint256 policyId, uint256 amount, string txHash);
+    event PayoutExecuted(address indexed user, uint256 policyId, uint256 amount);
     event OracleUpdated(address indexed newOracle);
     
     constructor(address _usdt) Ownable(msg.sender) {
@@ -70,7 +70,7 @@ contract InsurancePool is Ownable, ReentrancyGuard {
     /**
      * @dev Execute payout when spike is detected (called by backend oracle)
      */
-    function executePayout(address user, uint256 policyId, string calldata detectionTxHash) external nonReentrant {
+    function executePayout(address user, uint256 policyId) external nonReentrant {
         require(msg.sender == oracle, "Only oracle can execute payout");
         require(policyId < userPolicies[user].length, "Invalid policy ID");
         
@@ -88,7 +88,7 @@ contract InsurancePool is Ownable, ReentrancyGuard {
         // Transfer payout
         require(usdt.transfer(user, policy.coverageAmount), "Payout transfer failed");
         
-        emit PayoutExecuted(user, policyId, policy.coverageAmount, detectionTxHash);
+        emit PayoutExecuted(user, policyId, policy.coverageAmount);
     }
     
     /**
