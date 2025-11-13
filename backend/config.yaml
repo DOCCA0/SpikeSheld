@@ -6,8 +6,8 @@ database:
   dbname: spikeshield
 
 rpc:
-  url: https://sepolia.infura.io/v3/YOUR_INFURA_KEY
-  contract_address: "0x0000000000000000000000000000000000000000"
+  url: https://ethereum-sepolia-rpc.publicnode.com
+  contract_address: "0xbe4636f196f5a081074EBE435E82D38C9991F49D"
   private_key: "your_private_key_here"
 
 detector:

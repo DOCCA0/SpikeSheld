@@ -22,8 +22,19 @@ async function main() {
   // Fund the pool with initial USDT
   console.log("\n3️⃣ Funding InsurancePool...");
   const fundAmount = hre.ethers.parseUnits("10000", 6); // 10,000 USDT
-  await usdt.approve(insuranceAddress, fundAmount);
-  await insurance.fundPool(fundAmount);
+  
+  // Wait a bit to avoid nonce issues
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  
+  const approveTx = await usdt.approve(insuranceAddress, fundAmount);
+  await approveTx.wait();
+  console.log("✅ Approval confirmed");
+  
+  // Wait before next transaction
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  
+  const fundTx = await insurance.fundPool(fundAmount);
+  await fundTx.wait();
   console.log("✅ Pool funded with 10,000 USDT");
 
   // Display summary
