@@ -52,3 +52,23 @@ Thumbs.db
 contracts/cache/*
 contracts/node_modules/*
 contracts/artifacts/*
+
+# Cache directories
+.cache/
+.aws/
+.azure/
+.bash_history
+.bashrc
+.appinfo
+.home
+.pid
+
+# IDE settings
+.idea/
+*.iml
+
+# Database files
+*.db
+
+# JetBrains
+.JetBrains/
