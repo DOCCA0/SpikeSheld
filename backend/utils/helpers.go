@@ -35,6 +35,11 @@ type Config struct {
 		UpdateInterval int    `yaml:"update_interval"`
 	} `yaml:"chainlink"`
 
+	EventListener struct {
+		Enabled      bool `yaml:"enabled"`
+		PollInterval int  `yaml:"poll_interval"`
+	} `yaml:"eventlistener"`
+
 	Mode string `yaml:"mode"`
 }
 

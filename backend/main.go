@@ -6,11 +6,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"spikeshield/api"
 	"spikeshield/datafeed"
 	"spikeshield/db"
 	"spikeshield/detector"
+	"spikeshield/eventlistener"
 	"spikeshield/utils"
 )
 
@@ -49,6 +51,27 @@ func main() {
 			utils.LogError("API server error: %v", err)
 		}
 	}()
+
+	// Start event listener in background if enabled
+	var listener *eventlistener.EventListener
+	if config.EventListener.Enabled {
+		pollInterval := time.Duration(config.EventListener.PollInterval) * time.Second
+		listener, err = eventlistener.NewEventListener(config.RPC.URL, config.RPC.ContractAddress, pollInterval)
+		if err != nil {
+			utils.LogError("Failed to create event listener: %v", err)
+		} else {
+			utils.LogInfo("Starting event listener (poll interval: %ds)", config.EventListener.PollInterval)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			go func() {
+				if err := listener.Start(ctx); err != nil && err != context.Canceled {
+					utils.LogError("Event listener error: %v", err)
+				}
+			}()
+			defer listener.Close()
+		}
+	}
 
 	// Create detector
 	det := detector.NewDetector(*symbol, config.Detector.ThresholdPercent, config.Detector.BodyRatioMax)

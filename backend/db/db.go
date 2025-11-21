@@ -3,11 +3,13 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"math/big"
 	"time"
 
 	"spikeshield/utils"
 
-	_ "github.com/lib/pq"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 var DB *sql.DB
@@ -308,5 +310,129 @@ func DeleteAllPrices() error {
 func DeleteAllSpikes() error {
 	query := `DELETE FROM spikes`
 	_, err := DB.Exec(query)
+	return err
+}
+
+// InsertPolicyFromEvent inserts a policy purchase event
+func InsertPolicyFromEvent(userAddr common.Address, premium, coverage *big.Int, expiryTime *big.Int, txHash types.Log) error {
+	// Convert wei to USDT (6 decimals)
+	premiumFloat := new(big.Float).Quo(new(big.Float).SetInt(premium), big.NewFloat(1e6))
+	coverageFloat := new(big.Float).Quo(new(big.Float).SetInt(coverage), big.NewFloat(1e6))
+	expiry := time.Unix(expiryTime.Int64(), 0)
+
+	premiumValue, _ := premiumFloat.Float64()
+	coverageValue, _ := coverageFloat.Float64()
+
+	query := `
+		INSERT INTO policies
+		(user_address, premium, coverage_amount, purchase_time, expiry_time, status, tx_hash)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (tx_hash) DO NOTHING
+	`
+
+	_, err := DB.Exec(query,
+		userAddr.Hex(),
+		premiumValue,
+		coverageValue,
+		time.Now(),
+		expiry,
+		"active",
+		txHash.TxHash.Hex(),
+	)
+
+	return err
+}
+
+// InsertPayoutFromEvent inserts a payout execution event
+func InsertPayoutFromEvent(userAddr common.Address, policyID *big.Int, amount *big.Int, txHash types.Log) error {
+	// Convert wei to USDT (6 decimals)
+	amountFloat := new(big.Float).Quo(new(big.Float).SetInt(amount), big.NewFloat(1e6))
+	amountValue, _ := amountFloat.Float64()
+
+	// Find the most recent active policy for this user
+	var dbPolicyId int
+	policyQuery := `
+		SELECT id FROM policies
+		WHERE user_address = $1 AND status = 'active'
+		ORDER BY id DESC LIMIT 1
+	`
+	err := DB.QueryRow(policyQuery, userAddr.Hex()).Scan(&dbPolicyId)
+	if err != nil {
+		utils.LogError("Active policy not found for user %s, storing payout without policy link", userAddr.Hex())
+		dbPolicyId = 0
+	} else {
+		// Update policy status to 'claimed'
+		updateQuery := `UPDATE policies SET status = 'claimed' WHERE id = $1`
+		_, err = DB.Exec(updateQuery, dbPolicyId)
+		if err != nil {
+			utils.LogError("Failed to update policy status: %v", err)
+		}
+	}
+
+	// Insert into payouts table, ignore if tx_hash already exists to prevent duplicates
+	payoutQuery := `
+		INSERT INTO payouts
+		(policy_id, user_address, amount, tx_hash, executed_at)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (tx_hash) DO NOTHING
+	`
+
+	var policyIdPtr interface{}
+	if dbPolicyId > 0 {
+		policyIdPtr = dbPolicyId
+	} else {
+		policyIdPtr = nil
+	}
+
+	_, err = DB.Exec(payoutQuery,
+		policyIdPtr,
+		userAddr.Hex(),
+		amountValue,
+		txHash.TxHash.Hex(),
+		time.Now(),
+	)
+
+	return err
+}
+
+// GetActivePolicyIDForUser retrieves the most recent active policy ID for a user
+func GetActivePolicyIDForUser(userAddr common.Address) (int, error) {
+	var dbPolicyId int
+	query := `
+		SELECT id FROM policies
+		WHERE user_address = $1 AND status = 'active'
+		ORDER BY id DESC LIMIT 1
+	`
+	err := DB.QueryRow(query, userAddr.Hex()).Scan(&dbPolicyId)
+	if err != nil {
+		return 0, err
+	}
+	return dbPolicyId, nil
+}
+
+// GetLastSyncedBlock retrieves the last synced block number for a contract
+func GetLastSyncedBlock(contractAddr common.Address) (uint64, error) {
+	var lastBlock uint64
+	query := `SELECT last_synced_block FROM sync_state WHERE contract_address = $1`
+
+	err := DB.QueryRow(query, contractAddr.Hex()).Scan(&lastBlock)
+	if err != nil {
+		// If no record exists, return 0 (will start from recent blocks)
+		return 0, nil
+	}
+
+	return lastBlock, nil
+}
+
+// UpdateLastSyncedBlock updates the last synced block number for a contract
+func UpdateLastSyncedBlock(contractAddr common.Address, blockNumber uint64) error {
+	query := `
+		INSERT INTO sync_state (contract_address, last_synced_block, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (contract_address)
+		DO UPDATE SET last_synced_block = $2, updated_at = NOW()
+	`
+
+	_, err := DB.Exec(query, contractAddr.Hex(), blockNumber)
 	return err
 }

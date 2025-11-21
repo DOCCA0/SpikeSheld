@@ -8,11 +8,11 @@ const { ethers } = require("hardhat");
 
 // Get contract instance
 const InsurancePool = await ethers.getContractFactory("InsurancePool");
-const insurance = await InsurancePool.attach("0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0");
+const insurance = await InsurancePool.attach("0xb2C5582d7a782A6bA79b2751E9cE3c0dA3F4BeA5");
 
 // Get usdt instance
 const MUSDT = await ethers.getContractFactory("MockUSDT");
-const musdt = await MUSDT.attach("0x5FbDB2315678afecb367f032d93F642f64180aa3");
+const musdt = await MUSDT.attach("0xa56E945954B795c00b49D514cB53ecdC3932bC55");
 
 const aaa = await insurance.xxx
 const bbb = await musdt.yyy

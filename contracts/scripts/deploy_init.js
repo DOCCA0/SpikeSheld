@@ -35,10 +35,10 @@ async function main() {
   // Fund the pool (for demo)
   const fundAmount = ethers.parseUnits("10000", 6); // 10,000 USDT
   await mockUSDT.approve(proxyAddress, fundAmount);
-  await insurancePool.fundPool(fundAmount);
-  console.log("Pool funded with:", ethers.formatUnits(fundAmount, 6), "USDT");
-
-  console.log("\n=== Deployment Summary ===");
+  await insurancePool.fundPool(fundAmount, {
+    gasLimit: 300000,
+    gasPrice: ethers.parseUnits("50", "gwei")
+  });
   console.log("MockUSDT:", usdtAddress);
   console.log("InsurancePool Proxy:", proxyAddress);
   console.log("InsurancePool Implementation:", implementationAddress);
