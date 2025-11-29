@@ -3,15 +3,13 @@
 # Generate Go bindings for InsurancePool contract
 # Make sure you have abigen installed: go install github.com/ethereum/go-ethereum/cmd/abigen@latest
 
-CONTRACTS_DIR="../contracts/artifacts/contracts"
+CONTRACTS_DIR="../../contracts/artifacts/contracts"
 OUTPUT_DIR="."
 
 echo "Generating Go bindings for InsurancePool..."
 
-abigen --abi="${CONTRACTS_DIR}/InsurancePool.sol/InsurancePool.json" \
-       --pkg=contracts \
-       --type=InsurancePool \
-       --out="${OUTPUT_DIR}/insurancepool.go"
+ABI_FILE="${CONTRACTS_DIR}/InsurancePool.sol/InsurancePool.json"
+python3 -c "import json,sys; print(json.dumps(json.load(open('$ABI_FILE'))['abi']))" | abigen --abi - --pkg=contracts --type=InsurancePool --out="${OUTPUT_DIR}/insurancepool.go"
 
 if [ $? -eq 0 ]; then
     echo "✅ Successfully generated insurancepool.go"

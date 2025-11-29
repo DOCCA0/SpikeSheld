@@ -50,27 +50,30 @@ export const useContract = () => {
 
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-      
+      const checksummedAccount = ethers.getAddress(accounts[0]);
       setProvider(provider);
       setSigner(signer);
-      setAccount(accounts[0]);
+      setAccount(checksummedAccount);
 
       // Initialize contracts
-      const insurance = new ethers.Contract(INSURANCE_POOL_ADDRESS, INSURANCE_POOL_ABI, signer);
-      const usdt = new ethers.Contract(USDT_ADDRESS, USDT_ABI, signer);
+      const insuranceAddress = ethers.getAddress(INSURANCE_POOL_ADDRESS);
+      const usdtAddress = ethers.getAddress(USDT_ADDRESS);
+      const insurance = new ethers.Contract(insuranceAddress, INSURANCE_POOL_ABI, signer);
+      const usdt = new ethers.Contract(usdtAddress, USDT_ABI, signer);
       
       setInsuranceContract(insurance);
       setUsdtContract(usdt);
 
-      console.log("Wallet connected:", accounts[0]);
+      console.log("Wallet connected:", checksummedAccount);
       // Notify backend to upsert this user's balances and policies
       try {
         const apiBase = process.env.REACT_APP_API_URL || '';
         const url = apiBase ? `${apiBase.replace(/\/$/, '')}/api/wallet/link` : '/api/wallet/link';
+        console.log('address', checksummedAccount);
         fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ address: accounts[0], token: USDT_ADDRESS }),
+          body: JSON.stringify({ address: checksummedAccount, token: usdtAddress }),
         }).then((res) => {
           if (!res.ok) console.error('Wallet link API responded with', res.status);
           else console.log('Backend wallet-link upsert triggered');
@@ -113,7 +116,7 @@ export const useContract = () => {
 
       // Approve USDT spending
       console.log("Approving USDT...");
-      const approveTx = await usdtContract.approve(INSURANCE_POOL_ADDRESS, premium);
+      const approveTx = await usdtContract.approve(insuranceAddress, premium);
       await approveTx.wait();
       console.log("USDT approved");
 
@@ -165,7 +168,7 @@ export const useContract = () => {
         if (accounts.length === 0) {
           disconnectWallet();
         } else {
-          setAccount(accounts[0]);
+          setAccount(ethers.getAddress(accounts[0]));
         }
       });
 

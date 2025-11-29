@@ -182,11 +182,10 @@ func GetActivePolicies() ([]*Policy, error) {
 
 // GetPoliciesForUser retrieves policies for a specific user address
 func GetPoliciesForUser(userAddr string) ([]*Policy, error) {
-	lowerUser := strings.ToLower(userAddr)
-	query := `SELECT id, user_address, premium, coverage_amount, purchase_time, expiry_time, status, COALESCE(tx_hash, '') 
-			  FROM policies WHERE LOWER(user_address) = $1 ORDER BY id DESC`
+	query := `SELECT id, user_address, premium, coverage_amount, purchase_time, expiry_time, status, COALESCE(tx_hash, '')
+			  FROM policies WHERE user_address = $1 ORDER BY id DESC`
 
-	rows, err := DB.Query(query, lowerUser)
+	rows, err := DB.Query(query, userAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +197,6 @@ func GetPoliciesForUser(userAddr string) ([]*Policy, error) {
 		if err := rows.Scan(&p.ID, &p.UserAddress, &p.Premium, &p.CoverageAmount, &p.PurchaseTime, &p.ExpiryTime, &p.Status, &p.TxHash); err != nil {
 			return nil, err
 		}
-		p.UserAddress = strings.ToLower(p.UserAddress)
 		policies = append(policies, p)
 	}
 	return policies, nil
@@ -206,47 +204,35 @@ func GetPoliciesForUser(userAddr string) ([]*Policy, error) {
 
 // GetBalanceForUser returns the cached balance for a token and user
 func GetBalanceForUser(tokenAddr string, userAddr string) (*Balance, error) {
-	token := strings.ToLower(tokenAddr)
-	user := strings.ToLower(userAddr)
-
-	query := `SELECT id, token_address, user_address, balance, last_updated FROM balances WHERE LOWER(token_address) = $1 AND LOWER(user_address) = $2 LIMIT 1`
+	query := `SELECT id, token_address, user_address, balance, last_updated FROM balances WHERE token_address = $1 AND user_address = $2 LIMIT 1`
 
 	b := &Balance{}
-	err := DB.QueryRow(query, token, user).Scan(&b.ID, &b.TokenAddress, &b.UserAddress, &b.Balance, &b.LastUpdated)
+	err := DB.QueryRow(query, tokenAddr, userAddr).Scan(&b.ID, &b.TokenAddress, &b.UserAddress, &b.Balance, &b.LastUpdated)
 	if err != nil {
 		return nil, err
 	}
 
-	b.TokenAddress = strings.ToLower(b.TokenAddress)
-	b.UserAddress = strings.ToLower(b.UserAddress)
 	return b, nil
 }
 
 // UpsertBalance inserts or updates the balance for a token/user
 func UpsertBalance(tokenAddr string, userAddr string, balance float64) error {
-	token := strings.ToLower(tokenAddr)
-	user := strings.ToLower(userAddr)
-
 	query := `INSERT INTO balances (token_address, user_address, balance, last_updated)
 			  VALUES ($1, $2, $3, NOW())
 			  ON CONFLICT (token_address, user_address)
 			  DO UPDATE SET balance = EXCLUDED.balance, last_updated = NOW()`
-	_, err := DB.Exec(query, token, user, balance)
+	_, err := DB.Exec(query, tokenAddr, userAddr, balance)
 	return err
 }
 
 // UpdateBalanceDelta adds delta to existing balance (creates row if not exists)
 func UpdateBalanceDelta(tokenAddr string, userAddr string, delta float64) error {
-	// Normalize addresses to lower-case to avoid case-variance duplicates
-	token := strings.ToLower(tokenAddr)
-	user := strings.ToLower(userAddr)
-
 	// Use SQL upsert to increment existing balance or insert new
 	query := `INSERT INTO balances (token_address, user_address, balance, last_updated)
 			  VALUES ($1, $2, $3, NOW())
 			  ON CONFLICT (token_address, user_address)
 			  DO UPDATE SET balance = balances.balance + $3, last_updated = NOW()`
-	_, err := DB.Exec(query, token, user, delta)
+	_, err := DB.Exec(query, tokenAddr, userAddr, delta)
 	return err
 }
 
@@ -347,7 +333,6 @@ func scanPayoutRows(rows *sql.Rows) ([]*Payout, error) {
 		if err := rows.Scan(&p.ID, &p.PolicyID, &p.UserAddress, &p.Amount, &p.SpikeID, &p.TxHash, &p.ExecutedAt); err != nil {
 			return nil, err
 		}
-		p.UserAddress = strings.ToLower(p.UserAddress)
 		payouts = append(payouts, p)
 	}
 	return payouts, nil
@@ -366,10 +351,9 @@ func GetRecentPayouts(limit int, userAddress string) ([]*Payout, error) {
 		return scanPayoutRows(rows)
 	}
 
-	lowerUser := strings.ToLower(userAddress)
-	query := `SELECT id, policy_id, user_address, amount, spike_id, COALESCE(tx_hash, ''), executed_at 
-			  FROM payouts WHERE LOWER(user_address) = $1 ORDER BY executed_at DESC LIMIT $2`
-	rows, err := DB.Query(query, lowerUser, limit)
+	query := `SELECT id, policy_id, user_address, amount, spike_id, COALESCE(tx_hash, ''), executed_at
+			  FROM payouts WHERE user_address = $1 ORDER BY executed_at DESC LIMIT $2`
+	rows, err := DB.Query(query, userAddress, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -575,14 +559,22 @@ func GetDistinctPolicyUsers() ([]string, error) {
 
 // UpsertPolicy inserts or updates a policy record based on user_address + purchase_time
 func UpsertPolicy(userAddr string, premium float64, coverage float64, purchaseTime time.Time, expiryTime time.Time, status string) error {
-	query := `
-		INSERT INTO policies (user_address, premium, coverage_amount, purchase_time, expiry_time, status, tx_hash)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (user_address, purchase_time)
-		DO UPDATE SET premium = EXCLUDED.premium, coverage_amount = EXCLUDED.coverage_amount, expiry_time = EXCLUDED.expiry_time, status = EXCLUDED.status
-	`
-	lowerUser := strings.ToLower(userAddr)
-	_, err := DB.Exec(query, lowerUser, premium, coverage, purchaseTime, expiryTime, status, "")
+	var policyID sql.NullInt64
+	err := DB.QueryRow(`SELECT id FROM policies WHERE user_address = $1 AND purchase_time = $2`, userAddr, purchaseTime).Scan(&policyID)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+
+	if policyID.Valid {
+		// Update existing
+		_, err = DB.Exec(`UPDATE policies SET premium = $1, coverage_amount = $2, expiry_time = $3, status = $4 WHERE id = $5`,
+			premium, coverage, expiryTime, status, policyID.Int64)
+		return err
+	}
+
+	// Insert new
+	_, err = DB.Exec(`INSERT INTO policies (user_address, premium, coverage_amount, purchase_time, expiry_time, status, tx_hash)
+		VALUES ($1, $2, $3, $4, $5, $6, NULL)`, userAddr, premium, coverage, purchaseTime, expiryTime, status)
 	return err
 }
 
@@ -700,57 +692,30 @@ func UpsertBalanceFromChain(client *ethclient.Client, cfg *utils.Config, tokenAd
 
 // syncPoliciesForUser reads user's policies on-chain and upserts into DB
 func syncPoliciesForUser(client *ethclient.Client, cfg *utils.Config, userAddr string) error {
-	parsed, err := abi.JSON(strings.NewReader(contracts.InsurancePoolABI))
+	poolAddr := common.HexToAddress(cfg.RPC.ContractAddress)
+	pool, err := contracts.NewInsurancePool(poolAddr, client)
 	if err != nil {
 		return err
 	}
 
-	poolAddr := common.HexToAddress(cfg.RPC.ContractAddress)
-	contract := bind.NewBoundContract(poolAddr, parsed, client, client, client)
-
-	// Get count
-	var out []interface{}
-	if err := contract.Call(&bind.CallOpts{Context: context.Background()}, &out, "getUserPoliciesCount", common.HexToAddress(userAddr)); err != nil {
+	// Get all user policies at once using typed binding for safety
+	policies, err := pool.GetUserPolicies(&bind.CallOpts{Context: context.Background()}, common.HexToAddress(userAddr))
+	if err != nil {
 		return err
 	}
-	count := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
-
-	decimals := cfg.RPC.UsdtDecimals
-	if decimals <= 0 {
-		decimals = 6
+	if len(policies) == 0 {
+		return nil
 	}
+	decimals := cfg.RPC.UsdtDecimals
 
-	for i := int64(0); i < count.Int64(); i++ {
-		var outPolicy []interface{}
-		if err := contract.Call(&bind.CallOpts{Context: context.Background()}, &outPolicy, "getPolicy", common.HexToAddress(userAddr), big.NewInt(i)); err != nil {
-			utils.LogError("getPolicy call failed for user %s index %d: %v", userAddr, i, err)
-			continue
-		}
-
-		if len(outPolicy) == 0 {
-			continue
-		}
-
-		// The ABI returns a single tuple for getPolicy; extract elements from the tuple
-		var tuple []interface{}
-		if t, ok := outPolicy[0].([]interface{}); ok {
-			tuple = t
-		} else {
-			// sometimes the call returns a flat list
-			tuple = outPolicy
-		}
-
-		if len(tuple) < 7 {
-			continue
-		}
-
-		userAddrOnChain := *abi.ConvertType(tuple[0], new(common.Address)).(*common.Address)
-		premiumRaw := *abi.ConvertType(tuple[1], new(*big.Int)).(**big.Int)
-		coverageRaw := *abi.ConvertType(tuple[2], new(*big.Int)).(**big.Int)
-		purchaseRaw := *abi.ConvertType(tuple[3], new(*big.Int)).(**big.Int)
-		expiryRaw := *abi.ConvertType(tuple[4], new(*big.Int)).(**big.Int)
-		active := *abi.ConvertType(tuple[5], new(bool)).(*bool)
-		claimed := *abi.ConvertType(tuple[6], new(bool)).(*bool)
+	for _, policy := range policies {
+		userAddrOnChain := policy.User
+		premiumRaw := policy.Premium
+		coverageRaw := policy.CoverageAmount
+		purchaseRaw := policy.PurchaseTime
+		expiryRaw := policy.ExpiryTime
+		active := policy.Active
+		claimed := policy.Claimed
 
 		premiumFloat := new(big.Float).Quo(new(big.Float).SetInt(premiumRaw), new(big.Float).SetFloat64(math.Pow10(int(decimals))))
 		premiumVal, _ := premiumFloat.Float64()
