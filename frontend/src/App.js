@@ -18,7 +18,6 @@ function App() {
 
   const [balance, setBalance] = useState('0');
   const [policies, setPolicies] = useState([]);
-  const [hasActive, setHasActive] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   
@@ -555,21 +554,21 @@ function App() {
                   {payouts.slice(0, 5).map((payout, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
                       <td style={{ padding: '12px' }}>
-                        {formatDate(new Date(payout.executed_at))}
+                        {formatDate(new Date(payout.ExecutedAt))}
                       </td>
                       <td style={{ padding: '12px' }}>
-                        {payout.user_address ? `${payout.user_address.slice(0, 6)}...${payout.user_address.slice(-4)}` : 'Unknown'}
+                        {payout.UserAddress ? `${payout.UserAddress.slice(0, 6)}...${payout.UserAddress.slice(-4)}` : 'Unknown'}
                       </td>
                       <td style={{ padding: '12px', textAlign: 'right', color: '#48bb78', fontWeight: 'bold' }}>
-                        ${payout.amount?.toFixed(2)}
+                        ${payout.Amount?.toFixed(2)}
                       </td>
                       <td style={{ padding: '12px' }}>
-                        {payout.tx_hash ? (
-                          <a href={`https://sepolia.etherscan.io/tx/${payout.tx_hash}`} 
-                             target="_blank" 
+                        {payout.TxHash ? (
+                          <a href={`https://sepolia.etherscan.io/tx/${payout.TxHash}`}
+                             target="_blank"
                              rel="noopener noreferrer"
                              style={{ color: '#667eea' }}>
-                            {payout.tx_hash.substring(0, 10)}...
+                            {payout.TxHash.substring(0, 10)}...
                           </a>
                         ) : 'Pending'}
                       </td>

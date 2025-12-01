@@ -18,7 +18,7 @@ import (
 
 func main() {
 	// Parse command line flags
-	mode := flag.String("mode", "replay", "Mode: replay or live")
+	mode := flag.String("mode", "live", "Mode: replay or live")
 	symbol := flag.String("symbol", "BTCUSDT", "Trading symbol")
 	configPath := flag.String("config", "config.yaml", "Path to config file")
 	apiPort := flag.String("api-port", "8080", "API server port")

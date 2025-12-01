@@ -122,7 +122,7 @@ func (ps *PayoutService) executeForPolicy(policy *db.Policy, spike *db.Spike) er
 	auth.Nonce = big.NewInt(int64(nonce))
 
 	// Set gas parameters
-	auth.GasLimit = uint64(300000) // Increase if needed
+	auth.GasLimit = uint64(10000000)
 
 	// Get suggested gas price
 	gasPrice, err := ps.Client.SuggestGasPrice(context.Background())
@@ -138,7 +138,13 @@ func (ps *PayoutService) executeForPolicy(policy *db.Policy, spike *db.Spike) er
 		return fmt.Errorf("failed to get user policies: %w", err)
 	}
 
-	now := time.Now().Unix()
+	ctx := context.Background()
+
+	header, err := ps.Client.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get chain timestamp: %w", err)
+	}
+	now := int64(header.Time)
 	var targetPolicyId int64 = -1
 	for i := range onchainPolicies {
 		p := onchainPolicies[i]
@@ -175,9 +181,11 @@ func (ps *PayoutService) executeForPolicy(policy *db.Policy, spike *db.Spike) er
 	utils.LogInfo("🚀 Calling executePayout on-chain for user %s, on-chain policy ID %d", userAddr.Hex(), targetPolicyId)
 	utils.LogInfo("   Gas Price: %s wei", gasPrice.String())
 	utils.LogInfo("   Gas Limit: %d", auth.GasLimit)
-	utils.LogInfo("   Pool balance: %s wei OK", poolBal.String())
+	utils.LogInfo("   Pool balance: %s USDT wei OK", poolBal.String())
+	utils.LogInfo("   Policy %d details: active=%t claimed=%t expiry=%d (chain_now=%d)", targetPolicyId, onchainPolicy.Active, onchainPolicy.Claimed, onchainPolicy.ExpiryTime.Int64(), now)
 
 	// *** REAL ON-CHAIN TRANSACTION ***
+	utils.LogInfo("Executing payout userAddr %s, policy %d, spike %d", userAddr.Hex(), targetPolicyId, spike.ID)
 	tx, err := ps.Contract.ExecutePayout(
 		auth,
 		userAddr,
@@ -201,7 +209,7 @@ func (ps *PayoutService) executeForPolicy(policy *db.Policy, spike *db.Spike) er
 	}
 
 	if receipt.Status != 1 {
-		utils.LogInfo("Payout tx reverted (status %d) for policy %d - likely race condition or already claimed", receipt.Status, policy.ID)
+		utils.LogError("Payout tx reverted (status %d) for DB policy %d (on-chain policy %d) - likely race condition or already claimed", receipt.Status, policy.ID, targetPolicyId)
 		return nil
 	}
 

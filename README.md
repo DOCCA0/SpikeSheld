@@ -1,302 +1,272 @@
 # SpikeShield 🛡️
 
-Decentralized spike insurance protocol that protects users against sudden cryptocurrency price drops.
+Decentralized wick insurance protocol that protects users against cryptocurrency price wicks (small body, large range candles).
+
+**Updated: December 2025**
 
 ## 🌟 Features
 
 - **Dual Mode Operation**
-  - 📊 **Replay Mode**: Test with historical data (May 19, 2021 BTC crash)
-  - ⚡ **Live Mode**: Real-time monitoring using Chainlink Oracle
-  
-- **Smart Contracts**
-  - Purchase insurance with mock USDT
-  - Automatic payout execution when spike detected
-  - Configurable coverage parameters
-
-- **Backend System**
-  - Price data ingestion (CSV or Chainlink)
-  - Spike detection algorithm
-  - Automated on-chain payout triggering
-  - PostgreSQL database for data persistence
-
+  - 📊 **Replay Mode**: Monitor DB inserts for testing (feed data via API)
+  - ⚡ **Live Mode**: Real-time Chainlink price monitoring
+- **Smart Contracts** (Upgradeable)
+  - Purchase insurance with MockUSDT
+  - Automatic payout on wick detection
+  - Transparent proxy pattern for upgrades
+- **Backend API Server**
+  - Price data ingestion (API POST or Chainlink)
+  - Wick detection (body ratio ≤30%, range/close ≥10%)
+  - Automated on-chain payouts
+  - Event & token transfer polling
+  - PostgreSQL with balances/policies sync
+  - REST API for frontend (localhost:8080)
 - **Frontend DApp**
-  - Web3 wallet integration (MetaMask)
-  - Purchase insurance interface
-  - View policy status and history
-  - Real-time updates
+  - Web3 integration (ethers v6)
+  - Buy insurance, mint test USDT
+  - Real-time policies, balances, charts
+  - System stats, recent wicks/payouts
 
 ## 📁 Project Structure
 
 ```
-spikeshield/
-├── contracts/              # Solidity smart contracts
-│   ├── InsurancePool.sol   # Main insurance contract
-│   ├── MockUSDT.sol        # Test USDT token
-│   ├── hardhat.config.js   # Hardhat configuration
-│   └── package.json
+SpikeShield/
+├── contracts/                    # Solidity (Hardhat + Upgrades)
+│   ├── contracts/
+│   │   ├── InsurancePool.sol     # Upgradeable insurance logic
+│   │   └── MockUSDT.sol          # Test ERC20
+│   ├── scripts/
+│   │   ├── deploy_init.js        # Initial deploy
+│   │   └── deploy_upgrade.js     # Proxy upgrades
+│   ├── test/                     # Jest tests
+│   ├── hardhat.config.js
+│   ├── package.json
+│   └── USAGE.md
 │
-├── backend/                # Go backend service
-│   ├── main.go            # Entry point
-│   ├── config.yaml        # Configuration file
-│   ├── db/                # Database layer
-│   ├── datafeed/          # Price data feeds
-│   ├── detector/          # Spike detection
-│   ├── api/               # Blockchain interaction
-│   └── utils/             # Helper functions
+├── backend/                      # Go API service
+│   ├── .env.example              # PRIVATE_KEY env
+│   ├── main.go                   # Entry point (--mode replay/live)
+│   ├── config.yaml               # Config (DB, RPC, detector...)
+│   ├── api/                      # HTTP API (prices, stats...)
+│   ├── contracts/                # ABI bindings
+│   ├── datafeed/                 # Live/replay feeds
+│   ├── db/                       # PostgreSQL ORM
+│   │   └── schema.sql
+│   ├── detector/                 # Wick detection
+│   ├── eventlistener/            # Event polling
+│   └── utils/
 │
-├── frontend/              # React frontend
+├── frontend/                     # React 18 DApp
 │   ├── src/
-│   │   ├── App.js        # Main component
-│   │   ├── hooks/        # Web3 hooks
-│   │   └── components/   # UI components
-│   └── package.json
+│   │   ├── App.js                # Main UI
+│   │   ├── components/
+│   │   │   ├── PriceChart.js
+│   │   │   └── PayoutNotification.js
+│   │   ├── hooks/
+│   │   │   └── useContract.js
+│   │   └── services/
+│   │       └── api.js            # Backend API client
+│   ├── package.json              # ethers v6, lightweight-charts
+│   └── Dockerfile
 │
-├── data/                  # Historical price data
+├── data/                         # Test data
 │   └── btcusdt_wick_test.csv
 │
-└── docker-compose.yml     # One-command deployment
+├── docker-compose.yml            # Postgres + Backend + Frontend
+├── setup.sh / setup.bat          # Quick setup
+└── .env.example                  # Docker env vars
 ```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-
 - Node.js 18+
-- Go 1.21+
-- PostgreSQL 15+
-- MetaMask wallet
-- Testnet ETH/BNB
+- Go 1.24+
+- PostgreSQL 15+ (or Docker)
+- MetaMask (Sepolia testnet)
+- Testnet ETH
 
-### 1. Clone and Setup
-
+### 1. Clone & Setup
 ```bash
-git clone <repository>
-cd SpikeShield
+git clone <repo> && cd SpikeShield
 cp .env.example .env
+./setup.sh  # or setup.bat on Windows
 ```
 
-### 2. Deploy Smart Contracts
-
+### 2. Deploy Contracts (Sepolia)
 ```bash
 cd contracts
 npm install
 npx hardhat compile
 
-# Deploy to testnet (Sepolia or BSC Testnet)
-npx hardhat run scripts/deploy.js --network sepolia
+# Deploy initial proxy
+npx hardhat run scripts/deploy_init.js --network sepolia
 
-# Update .env with deployed contract addresses
+# Copy addresses to backend/config.yaml & frontend/.env
+# rpc.contract_address, rpc.usdt_address
 ```
 
-### 3. Setup Backend
-
+### 3. Backend Setup
 ```bash
 cd backend
-go mod download
+cp .env.example .env
+go mod tidy
 
-# Update config.yaml with your settings
-# - Database connection
-# - RPC URL
-# - Contract addresses
-# - Detection parameters
+# Edit config.yaml:
+# - database creds
+# - rpc.url, contract_address, usdt_address
+# - rpc.private_key: "${PRIVATE_KEY}" (loads from .env)
+# - chainlink.btc_usd_feed (Sepolia: 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43)
+```
 
-# Initialize database
+**Database Init** (if not Docker):
+```bash
 psql -U postgres -d spikeshield -f db/schema.sql
 ```
 
-### 4. Setup Frontend
-
+### 4. Frontend Setup
 ```bash
 cd frontend
 npm install
-
-# Update .env with contract addresses
-echo "REACT_APP_INSURANCE_POOL_ADDRESS=<your_address>" >> .env
-echo "REACT_APP_USDT_ADDRESS=<your_address>" >> .env
+# Add to .env:
+# REACT_APP_INSURANCE_POOL_ADDRESS=0x...
+# REACT_APP_USDT_ADDRESS=0x...
 ```
 
-### 5. Run with Docker (Easiest)
-
+### 5. Docker (Recommended - One Command)
 ```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
+docker compose up -d  # Starts DB+Backend(replay)+Frontend:3000
+docker compose logs -f backend  # Watch logs
+docker compose down
 ```
+*Note: For Docker backend payouts, set PRIVATE_KEY=... in root .env. Frontend: REACT_APP_* in frontend/.env*
 
-### 6. Run Manually
+### 6. Manual Run
+**T1 - DB** (if not Docker): `psql ... schema.sql`
 
-**Terminal 1 - Database:**
-```bash
-# Start PostgreSQL (if not using Docker)
-psql -U postgres
-CREATE DATABASE spikeshield;
-\c spikeshield
-\i backend/db/schema.sql
-```
-
-**Terminal 2 - Backend:**
+**T2 - Backend**:
 ```bash
 cd backend
+# Replay (monitor DB inserts)
+go run main.go --mode replay --symbol BTCUSDT --api-port 8080
 
-# Replay mode (test with historical data)
-go run main.go --mode replay --symbol BTCUSDT --start "2021-05-19T00:00:00" --end "2021-05-19T03:00:00"
-
-# Live mode (real-time monitoring)
+# Live (Chainlink)
 go run main.go --mode live --symbol BTCUSDT
 ```
 
-**Terminal 3 - Frontend:**
-```bash
-cd frontend
-npm start
-# Opens http://localhost:3000
-```
+**T3 - Frontend**: `cd frontend && npm start` (localhost:3000)
 
-## 🎬 Demo Flow (Hackathon Presentation)
+## 🎬 Demo Flow
 
-### Scenario: Protect Against May 19, 2021 BTC Flash Crash
+1. **Start Services**: `docker compose up -d`
+2. **Frontend** (localhost:3000):
+   - Connect MetaMask (Sepolia)
+   - Mint 100 Test USDT
+   - Buy Insurance (10 USDT → 100 coverage, 24h)
+3. **Simulate Replay**:
+   - POST CSV prices to http://localhost:8080/prices (dev endpoint)
+   - Or manual DB insert wick candle
+4. **Observe**:
+   - Backend detects wick (body≤30%, range≥10%)
+   - Auto triggers payout
+   - Frontend shows "claimed", balance +100 USDT
+5. **Verify**: Etherscan tx hash
 
-1. **Connect Wallet**
-   - Open frontend at http://localhost:3000
-   - Click "Connect Wallet"
-   - Connect MetaMask to testnet
+## ⚙️ Configuration
 
-2. **Get Test Funds**
-   - Click "Mint 100 Test USDT"
-   - Verify balance shows 100 USDT
-
-3. **Purchase Insurance**
-   - Click "Buy Insurance (10 USDT)"
-   - Approve transaction in MetaMask
-   - Wait for confirmation
-   - See policy appear in "Your Insurance Policies"
-
-4. **Run Backend Replay**
-   ```bash
-   go run main.go --mode replay --symbol BTCUSDT --start "2021-05-19T00:00:00" --end "2021-05-19T03:00:00"
-   ```
-
-5. **Observe Spike Detection**
-   - Backend loads historical data
-   - Detects 10%+ price drop at 01:40 (45000 → 40500)
-   - Automatically triggers smart contract payout
-
-6. **Verify Payout**
-   - Refresh frontend
-   - Policy status changes to "Claimed"
-   - Balance increases by 100 USDT (coverage amount)
-   - Transaction hash displayed
-
-## 📊 Configuration
-
-### Backend (config.yaml)
-
+### backend/config.yaml
 ```yaml
+database:
+  host: localhost  # postgres for Docker
+  port: 5432
+  user: postgres
+  password: postgres
+  dbname: spikeshield
+
+rpc:
+  url: https://ethereum-sepolia-rpc.publicnode.com
+  contract_address: "0x..."
+  private_key: "${PRIVATE_KEY}"  # Payout signer
+  usdt_address: "0x..."
+  usdt_decimals: 6
+
 detector:
-  threshold_percent: 10.0   # Trigger at 10% drop
-  window_minutes: 5         # Check last 5 minutes
+  threshold_percent: 0.1     # (high-low)/close >= 10%
+  body_ratio_max: 0.3        # |open-close|/(high-low) <= 30%
 
 chainlink:
-  btc_usd_feed: "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43"  # Sepolia
-  update_interval: 60       # Fetch every 60 seconds
+  btc_usd_feed: "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43"  # Sepolia BTC/USD
+  update_interval: 60
+
+eventlistener:
+  enabled: true
+  poll_interval: 1  # seconds
+
+mode: replay
 ```
 
-### Smart Contract Parameters
-
+### Insurance Parameters
 - Premium: 10 USDT
 - Coverage: 100 USDT
 - Duration: 24 hours
-- Spike Threshold: 10% drop within 5 minutes
+- Wick: Body ratio ≤30% + Range ratio ≥10%
 
 ## 🧪 Testing
 
-### Test Replay Mode
 ```bash
-# Test with May 19, 2021 crash data
-go run main.go --mode replay --symbol BTCUSDT --start "2021-05-19T00:00:00" --end "2021-05-19T03:00:00"
+# Contracts
+cd contracts && npx hardhat test
+
+# Backend replay (feed CSV manually)
+go run main.go --mode replay
+
+# Live mode
+go run main.go --mode live
 ```
 
-### Test Live Mode
-```bash
-# Connect to Chainlink price feed
-go run main.go --mode live --symbol BTCUSDT
-```
+## 📊 Database Schema
 
-### Contract Testing
-```bash
-cd contracts
-npx hardhat test
-```
-
-## 📝 Database Schema
-
-| Table | Description |
-|-------|-------------|
-| `prices` | Price data from CSV or Oracle |
-| `spikes` | Detected spike events |
-| `policies` | User insurance policies |
-| `payouts` | Executed payout records |
+| Table       | Description                  |
+|-------------|------------------------------|
+| `prices`    | OHLCV candles                |
+| `spikes`    | Detected wicks               |
+| `policies`  | User policies                |
+| `payouts`   | Executed payouts             |
+| `balances`  | ERC20 balance cache          |
+| `sync_state`| Event sync tracking          |
 
 ## 🔧 Troubleshooting
 
-### Backend won't start
-- Check PostgreSQL is running
-- Verify config.yaml database settings
-- Run `go mod tidy` to fix dependencies
+- **Backend DB error**: Check config.yaml creds, Postgres running
+- **No prices**: POST to /api/prices or enable live mode
+- **Wallet not linked**: Frontend auto-links on connect
+- **Payout fails**: Check private_key, contract USDT balance, oracle role
+- **Events missing**: Enable eventlistener, check poll_interval
 
-### Frontend can't connect to wallet
-- Install MetaMask extension
-- Switch to correct testnet
-- Check contract addresses in .env
-
-### Payout not executing
-- Verify backend has oracle role in contract
-- Check RPC URL is correct
-- Ensure contract has sufficient USDT balance
-
-## 🌐 Supported Networks
-
-- Ethereum Sepolia Testnet
+## 🌐 Networks
+- Sepolia (primary)
 - BSC Testnet
-- Any EVM-compatible testnet
+- Local Hardhat
 
-## 📚 Key Technologies
-
-- **Blockchain**: Solidity, Hardhat, OpenZeppelin
-- **Backend**: Go, PostgreSQL
-- **Frontend**: React, ethers.js
+## 📚 Tech Stack
+- **Contracts**: Solidity ^0.8, OpenZeppelin Upgrades, Hardhat
+- **Backend**: Go 1.24, Gin, go-ethereum, PostgreSQL
+- **Frontend**: React 18, ethers 6, Lightweight Charts
 - **Oracle**: Chainlink Price Feeds
-- **DevOps**: Docker, Docker Compose
+- **DevOps**: Docker Compose
 
-## 🎯 Future Enhancements (Post-Hackathon)
-
-- [ ] Support multiple assets (ETH, SOL, etc.)
-- [ ] Dynamic premium calculation based on volatility
-- [ ] NFT-based policy representation
-- [ ] Liquidity pool mechanism
-- [ ] Advanced charting and analytics
-- [ ] Mobile app
-- [ ] Mainnet deployment
+## 🎯 Enhancements
+- [x] Event polling & balance sync
+- [x] API server + charts
+- [ ] Multi-asset
+- [ ] Dynamic pricing
+- [ ] Mainnet
+- [ ] Audits
 
 ## 📄 License
-
 MIT
 
 ## 👥 Team
-
-Built for hackathon demo purposes.
-
-## 🙏 Acknowledgments
-
-- Chainlink for price oracle infrastructure
-- OpenZeppelin for secure contract libraries
-- May 19, 2021 for providing excellent test data 😅
+Hackathon prototype → Production-ready MVP
 
 ---
-
-**⚠️ Disclaimer**: This is a hackathon MVP for demonstration purposes only. Not audited. Do not use with real funds.
+**⚠️ Testnet only. Not audited. Demo purposes.**

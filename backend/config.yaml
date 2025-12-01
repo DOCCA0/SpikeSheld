@@ -7,9 +7,9 @@ database:
 
 rpc:
   url: https://ethereum-sepolia-rpc.publicnode.com
-  contract_address: "0xb2C5582d7a782A6bA79b2751E9cE3c0dA3F4BeA5"
+  contract_address: "0x9d4ea85FB893735664f4c785987cF16ea2fBc48a"
   private_key: "${PRIVATE_KEY}"
-  usdt_address: "0xa56E945954B795c00b49D514cB53ecdC3932bC55"
+  usdt_address: "0x32589C7e37A6A7D99b3602172917Fd1890ad8b3a"
   usdt_decimals: 6
 
 detector:

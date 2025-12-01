@@ -94,7 +94,7 @@ contract InsurancePool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
         require(policy.active, "Policy not active");
         require(!policy.claimed, "Already claimed");
         require(block.timestamp <= policy.expiryTime, "Policy expired");
-        require(address(this).balance >= policy.coverageAmount || usdt.balanceOf(address(this)) >= policy.coverageAmount, "Insufficient pool balance");
+        require(usdt.balanceOf(address(this)) >= policy.coverageAmount, "Insufficient pool balance");
         
         // Mark as claimed
         policy.claimed = true;
