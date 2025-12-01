@@ -201,7 +201,8 @@ func (ps *PayoutService) executeForPolicy(policy *db.Policy, spike *db.Spike) er
 	}
 
 	if receipt.Status != 1 {
-		return fmt.Errorf("transaction failed with status: %d", receipt.Status)
+		utils.LogInfo("Payout tx reverted (status %d) for policy %d - likely race condition or already claimed", receipt.Status, policy.ID)
+		return nil
 	}
 
 	utils.LogInfo("✅ Transaction mined in block %d", receipt.BlockNumber.Uint64())

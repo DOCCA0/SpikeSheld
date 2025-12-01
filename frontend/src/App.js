@@ -147,9 +147,17 @@ function App() {
     }
   };
 
-  // Format date
+  // Format date (UTC: YYYY-MM-DD HH:mm:ss)
   const formatDate = (date) => {
-    return date ? date.toLocaleString() : 'N/A';
+    if (!date) return 'N/A';
+    const d = new Date(date);
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const hour = String(d.getUTCHours()).padStart(2, '0');
+    const minute = String(d.getUTCMinutes()).padStart(2, '0');
+    const second = String(d.getUTCSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
   };
 
   // Get policy status
@@ -493,7 +501,7 @@ function App() {
                     return (
                       <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
                         <td style={{ padding: '12px' }}>
-                          {new Date(spike.Timestamp).toLocaleString()}
+                          {formatDate(new Date(spike.Timestamp))}
                         </td>
                         <td style={{ padding: '12px' }}>{spike.Symbol}</td>
                         <td style={{ padding: '12px', textAlign: 'right', color: '#667eea', fontWeight: 'bold' }}>
@@ -547,7 +555,7 @@ function App() {
                   {payouts.slice(0, 5).map((payout, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
                       <td style={{ padding: '12px' }}>
-                        {new Date(payout.executed_at).toLocaleString()}
+                        {formatDate(new Date(payout.executed_at))}
                       </td>
                       <td style={{ padding: '12px' }}>
                         {payout.user_address ? `${payout.user_address.slice(0, 6)}...${payout.user_address.slice(-4)}` : 'Unknown'}
